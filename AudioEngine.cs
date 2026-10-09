@@ -10,6 +10,7 @@ sealed class AudioEngine : IDisposable
     readonly object _gate = new();
     readonly object _meterLock = new();
     readonly ShakerFilter _filter = new();
+    readonly EnergyHistory _history = new();
 
     SynchronizationContext? _ui;
     MMDeviceEnumerator? _enumerator;
@@ -19,6 +20,7 @@ sealed class AudioEngine : IDisposable
     SourceLayout _layout;
     int _accepting;
     int _failurePosted;
+    int _visualizationActive;
     bool _running;
     float _peak;
     int _clipped;
@@ -28,6 +30,28 @@ sealed class AudioEngine : IDisposable
     volatile float _level = 1f;
 
     public event EventHandler<string>? Failed;
+
+    public EnergyHistory History => _history;
+
+    /// <summary>
+    /// When false, skip pass/reject history so minimized or game-time use stays cheap.
+    /// </summary>
+    public bool VisualizationActive
+    {
+        get => Volatile.Read(ref _visualizationActive) == 1;
+        set
+        {
+            if (value)
+            {
+                Volatile.Write(ref _visualizationActive, 1);
+            }
+            else
+            {
+                Volatile.Write(ref _visualizationActive, 0);
+                _history.Clear();
+            }
+        }
+    }
 
     public bool IsRunning
     {
@@ -108,6 +132,7 @@ sealed class AudioEngine : IDisposable
             capture.RecordingStopped += OnRecordingStopped;
 
             _filter.Reset();
+            _history.SetSampleRate(layout.SampleRate);
             lock (_gate)
             {
                 _enumerator = enumerator;
@@ -167,6 +192,7 @@ sealed class AudioEngine : IDisposable
             _running = false;
         }
 
+        _history.Clear();
         try { capture?.StopRecording(); } catch { /* already stopped */ }
         try { output?.Stop(); } catch { /* already stopped */ }
         try { capture?.Dispose(); } catch { /* release anyway */ }
@@ -207,10 +233,15 @@ sealed class AudioEngine : IDisposable
                 float gain = _level;
                 bool clipped = false;
                 float peak = 0;
+                bool visualize = Volatile.Read(ref _visualizationActive) == 1;
                 Span<float> stereo = MemoryMarshal.Cast<byte, float>(interleaved.AsSpan(0, frames * 8));
                 for (int i = 0; i < frames; i++)
                 {
-                    float sample = _filter.Process(mono[i]) * gain;
+                    float filtered = _filter.Process(mono[i]);
+                    if (visualize)
+                        _history.AddFrame(filtered, mono[i] - filtered);
+
+                    float sample = filtered * gain;
                     if (_fadeRemaining > 0)
                     {
                         sample *= 1f - (_fadeRemaining / (float)_fadeLength);
@@ -237,7 +268,7 @@ sealed class AudioEngine : IDisposable
 
                 buffer.AddSamples(interleaved, 0, frames * 8);
                 LimitLatency(buffer);
-                if (peak > 0)
+                if (visualize && peak > 0)
                 {
                     lock (_meterLock)
                     {

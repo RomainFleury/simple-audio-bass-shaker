@@ -10,6 +10,7 @@ This is a small Windows app that listens to one audio output, keeps the low end,
 2. Pick the **shaker** (the device wired to your amp).
 3. Set a **cutoff** (default 80 Hz) and a **level**.
 4. Hit **Start**.
+5. Optionally turn on **Live view** for the signal meter and a 5-second pass vs reject energy chart. Leave it off (or minimize the window) while gaming so the app stays light.
 
 The source keeps playing the full mix. The shaker gets a filtered mono copy of the bass.
 

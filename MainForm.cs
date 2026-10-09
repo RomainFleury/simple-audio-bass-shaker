@@ -14,53 +14,84 @@ sealed class MainForm : Form
     readonly Label _cutoffValue = new() { TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill };
     readonly Label _levelValue = new() { TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill };
     readonly ProgressBar _meter = new() { Minimum = 0, Maximum = 100, Dock = DockStyle.Fill, Style = ProgressBarStyle.Continuous };
+    readonly Label _bufferValue = new()
+    {
+        Text = "Buffer —",
+        AutoSize = false,
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleRight
+    };
+    readonly Label _signalLabel = new()
+    {
+        Text = "Signal",
+        AutoSize = false,
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft
+    };
+    readonly CheckBox _liveView = new()
+    {
+        Text = "Live view (last 5 s)",
+        AutoSize = true,
+        Anchor = AnchorStyles.Left,
+        Margin = new Padding(0, 4, 0, 4),
+        Padding = new Padding(0),
+        CheckAlign = ContentAlignment.MiddleLeft,
+        TextAlign = ContentAlignment.MiddleLeft
+    };
+    readonly BandViewPanel _bandView = new() { Dock = DockStyle.Fill, Margin = new Padding(0, 4, 0, 0) };
     readonly Button _startButton = new() { Text = "Start", AutoSize = true, Padding = new Padding(16, 6, 16, 6) };
     readonly Button _refreshButton = new() { Text = "Refresh devices", AutoSize = true, Padding = new Padding(8, 6, 8, 6) };
     readonly Label _status = new() { AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+    readonly TableLayoutPanel _layout = new()
+    {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 10,
+        Padding = new Padding(16)
+    };
     bool _loading = true;
+    bool _uiReady;
     DateTime _clipUntil = DateTime.MinValue;
 
     public MainForm()
     {
         Text = "Simple Bass Shaker Router";
         Font = new Font("Segoe UI", 10f);
-        MinimumSize = new Size(680, 520);
-        ClientSize = new Size(700, 520);
         StartPosition = FormStartPosition.CenterScreen;
         AcceptButton = _startButton;
 
-        var table = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 8,
-            Padding = new Padding(16)
-        };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
 
         var intro = new Label
         {
             AutoSize = false,
             Dock = DockStyle.Fill,
-            Text = "Copies the low end of one playback device to another, for a bass shaker. The source keeps playing the full mix. Stereo uses both channels. Surround uses the front pair plus the low-frequency channel. A fixed high-pass at 18 Hz blocks the slowest rumbles."
+            Text = "Copies the low end of one playback device to another, for a bass shaker. The source keeps playing the full mix. Turn on live view only when you want signal and pass vs reject energy."
         };
-        table.Controls.Add(intro, 0, 0);
-        table.SetColumnSpan(intro, 2);
+        _layout.Controls.Add(intro, 0, 0);
+        _layout.SetColumnSpan(intro, 2);
 
-        AddField(table, 1, "Source", _sourceCombo);
-        AddField(table, 2, "Shaker", _shakerCombo);
-        AddField(table, 3, "Cutoff", SliderRow(_cutoff, _cutoffValue));
-        AddField(table, 4, "Level", SliderRow(_level, _levelValue));
-        AddField(table, 5, "Signal", _meter);
+        AddField(_layout, 1, "Source", _sourceCombo);
+        AddField(_layout, 2, "Shaker", _shakerCombo);
+        AddField(_layout, 3, "Cutoff", SliderRow(_cutoff, _cutoffValue));
+        AddField(_layout, 4, "Level", SliderRow(_level, _levelValue));
+        _layout.Controls.Add(_liveView, 0, 5);
+        _layout.SetColumnSpan(_liveView, 2);
+        _layout.Controls.Add(_signalLabel, 0, 6);
+        _layout.Controls.Add(SignalRow(_meter, _bufferValue), 1, 6);
+        _layout.Controls.Add(_bandView, 0, 7);
+        _layout.SetColumnSpan(_bandView, 2);
 
         var buttons = new FlowLayoutPanel
         {
@@ -70,11 +101,11 @@ sealed class MainForm : Form
         };
         buttons.Controls.Add(_startButton);
         buttons.Controls.Add(_refreshButton);
-        table.Controls.Add(buttons, 0, 6);
-        table.SetColumnSpan(buttons, 2);
-        table.Controls.Add(_status, 0, 7);
-        table.SetColumnSpan(_status, 2);
-        Controls.Add(table);
+        _layout.Controls.Add(buttons, 0, 8);
+        _layout.SetColumnSpan(buttons, 2);
+        _layout.Controls.Add(_status, 0, 9);
+        _layout.SetColumnSpan(_status, 2);
+        Controls.Add(_layout);
 
         _cutoff.ValueChanged += (_, _) =>
         {
@@ -92,14 +123,22 @@ sealed class MainForm : Form
         _shakerCombo.SelectedIndexChanged += (_, _) => { if (!_loading) UpdateAvailability(); };
         _startButton.Click += (_, _) => ToggleRunning();
         _refreshButton.Click += (_, _) => LoadDevices();
+        _liveView.CheckedChanged += (_, _) =>
+        {
+            if (!_loading)
+                ApplyVisualizationState();
+        };
         _engine.Failed += OnFailed;
         _timer.Tick += (_, _) => RefreshMeter();
         _timer.Start();
 
         _cutoff.Value = _settings.CutoffHz;
         _level.Value = _settings.LevelPercent;
+        _liveView.Checked = _settings.LiveView;
         LoadDevices();
         _loading = false;
+        _uiReady = true;
+        ApplyVisualizationState();
         UpdateAvailability();
     }
 
@@ -112,11 +151,19 @@ sealed class MainForm : Form
         base.OnFormClosing(e);
     }
 
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (_uiReady)
+            ApplyVisualizationState();
+    }
+
     void ToggleRunning()
     {
         if (_engine.IsRunning)
         {
             _engine.Stop();
+            _bandView.Clear();
             SaveSettings();
             SetIdle("Stopped.");
             return;
@@ -132,6 +179,7 @@ sealed class MainForm : Form
         try
         {
             _engine.Start(source.Id, shaker.Id, source.Name, shaker.Name, _cutoff.Value, _level.Value / 100f);
+            ApplyVisualizationState();
             SaveSettings();
             SetRunning();
         }
@@ -151,8 +199,44 @@ sealed class MainForm : Form
         if (IsDisposed)
             return;
         _engine.Stop();
+        _bandView.Clear();
         SetIdle(message);
         MessageBox.Show(this, message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
+    void ApplyVisualizationState()
+    {
+        if (!_uiReady || _layout.RowStyles.Count < 8)
+            return;
+
+        bool showUi = _liveView.Checked;
+        bool active = showUi && WindowState != FormWindowState.Minimized && Visible;
+
+        _signalLabel.Visible = showUi;
+        _meter.Visible = showUi;
+        _bufferValue.Visible = showUi;
+        _bandView.Visible = showUi;
+        _layout.RowStyles[6] = new RowStyle(SizeType.Absolute, showUi ? 36 : 0);
+        _layout.RowStyles[7] = showUi
+            ? new RowStyle(SizeType.Percent, 100)
+            : new RowStyle(SizeType.Absolute, 0);
+
+        Size min = showUi ? new Size(700, 640) : new Size(700, 420);
+        if (MinimumSize != min)
+            MinimumSize = min;
+        if (showUi && ClientSize.Height < 640)
+            ClientSize = new Size(Math.Max(ClientSize.Width, 740), 680);
+        else if (!showUi && ClientSize.Height < 420)
+            ClientSize = new Size(Math.Max(ClientSize.Width, 740), 480);
+
+        _engine.VisualizationActive = active;
+        _bandView.SetActive(active);
+        if (!active)
+        {
+            _bandView.Clear();
+            _meter.Value = 0;
+            _bufferValue.Text = "Buffer —";
+        }
     }
 
     void RefreshMeter()
@@ -160,23 +244,35 @@ sealed class MainForm : Form
         if (!_engine.IsRunning)
         {
             _meter.Value = 0;
+            _bufferValue.Text = "Buffer —";
             return;
         }
 
-        float peak = _engine.ConsumePeak();
-        _meter.Value = (int)Math.Clamp(peak * 100f, 0, 100);
         if (_engine.ConsumeClipping())
             _clipUntil = DateTime.UtcNow.AddMilliseconds(600);
+
+        if (_engine.VisualizationActive)
+        {
+            float peak = _engine.ConsumePeak();
+            _meter.Value = (int)Math.Clamp(peak * 100f, 0, 100);
+            _bufferValue.Text = $"Buffer {_engine.BufferedMilliseconds} ms";
+            _bandView.UpdateHistory(_engine.History);
+        }
 
         if (DateTime.UtcNow < _clipUntil)
         {
             _status.ForeColor = Color.DarkRed;
-            _status.Text = $"Clipping. Lower the level. {_engine.RouteDescription} Buffer {_engine.BufferedMilliseconds} ms.";
+            _status.Text = "Clipping. Lower the level.";
             return;
         }
 
         _status.ForeColor = Color.DarkGreen;
-        _status.Text = $"Running. {_engine.RouteDescription} Buffer {_engine.BufferedMilliseconds} ms.";
+        if (!_liveView.Checked)
+            _status.Text = "Running. Live view off.";
+        else if (WindowState == FormWindowState.Minimized)
+            _status.Text = "Running. Live view paused while minimized.";
+        else
+            _status.Text = $"Running. {_engine.RouteDescription}";
     }
 
     void LoadDevices()
@@ -326,6 +422,7 @@ sealed class MainForm : Form
         _settings.ShakerId = (_shakerCombo.SelectedItem as DeviceChoice)?.Id;
         _settings.CutoffHz = _cutoff.Value;
         _settings.LevelPercent = _level.Value;
+        _settings.LiveView = _liveView.Checked;
         try
         {
             SettingsStore.Save(_settings);
@@ -363,6 +460,24 @@ sealed class MainForm : Form
         value.Margin = new Padding(0);
         row.Controls.Add(slider, 0, 0);
         row.Controls.Add(value, 1, 0);
+        return row;
+    }
+
+    static Control SignalRow(ProgressBar meter, Label buffer)
+    {
+        var row = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        meter.Margin = new Padding(0, 6, 8, 6);
+        buffer.Margin = new Padding(0);
+        row.Controls.Add(meter, 0, 0);
+        row.Controls.Add(buffer, 1, 0);
         return row;
     }
 

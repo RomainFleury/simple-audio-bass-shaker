@@ -8,6 +8,7 @@ sealed class UserSettings
     public string? ShakerId { get; set; }
     public int CutoffHz { get; set; } = 80;
     public int LevelPercent { get; set; } = 100;
+    public bool LiveView { get; set; }
 
     public void Clamp()
     {
