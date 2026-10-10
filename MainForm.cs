@@ -59,6 +59,16 @@ sealed class MainForm : Form
         Font = new Font("Segoe UI", 10f);
         StartPosition = FormStartPosition.CenterScreen;
         AcceptButton = _startButton;
+        try
+        {
+            string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+            if (File.Exists(iconPath))
+                Icon = new Icon(iconPath);
+        }
+        catch
+        {
+            // Fall back to the default window icon if the asset is missing.
+        }
 
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -165,6 +175,7 @@ sealed class MainForm : Form
             _engine.Stop();
             _bandView.Clear();
             SaveSettings();
+            UpdateAvailability();
             SetIdle("Stopped.");
             return;
         }
@@ -200,6 +211,7 @@ sealed class MainForm : Form
             return;
         _engine.Stop();
         _bandView.Clear();
+        UpdateAvailability();
         SetIdle(message);
         MessageBox.Show(this, message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
@@ -410,6 +422,9 @@ sealed class MainForm : Form
     {
         if (_engine.IsRunning)
             return;
+        _sourceCombo.Enabled = true;
+        _shakerCombo.Enabled = true;
+        _refreshButton.Enabled = true;
         _startButton.Text = "Start";
         _status.ForeColor = SystemColors.ControlText;
         _status.Text = message;
